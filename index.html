@@ -1,1 +1,753 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase タスクマネージャー - TaskSync</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind Configuration & Custom Embedded CSS -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Embedded Custom CSS Styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .task-card-enter {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
 
+    <!-- App Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <i class="fa-solid font-bold fa-check-double text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">TaskSync</h1>
+                    <p class="text-xs text-slate-500 font-medium">GitHub Pages & Firebase Sync</p>
+                </div>
+            </div>
+
+            <!-- Header Right Actions -->
+            <div class="flex items-center space-x-3">
+                <!-- Data Mode Selector Switch -->
+                <div class="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-semibold text-slate-600">
+                    <button id="btn-mode-private" onclick="switchDataMode('private')" class="px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 bg-white text-blue-600 shadow-sm">
+                        <i class="fa-solid fa-lock"></i>
+                        <span class="hidden sm:inline">マイタスク</span>
+                    </button>
+                    <button id="btn-mode-public" onclick="switchDataMode('public')" class="px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 hover:text-slate-900">
+                        <i class="fa-solid fa-globe"></i>
+                        <span class="hidden sm:inline">パブリック共有</span>
+                    </button>
+                </div>
+
+                <!-- Add Task Primary Button -->
+                <button onclick="openTaskModal()" class="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-medium px-4 py-2 rounded-xl text-sm flex items-center space-x-2 transition shadow-md shadow-blue-500/20">
+                    <i class="fa-solid fa-plus"></i>
+                    <span class="hidden md:inline">新規タスク</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- User Status Banner -->
+        <div class="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-5 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center space-x-2 text-blue-200 text-xs font-semibold tracking-wider uppercase mb-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="mode-badge-label">プライベートデータベースモード</span>
+                </div>
+                <h2 class="text-xl font-bold">リアルタイム同期タスクマネージャー</h2>
+                <p class="text-sm text-blue-100/80 mt-0.5">Firebase Firestoreでクラウド上にリアルタイム保存・同期されています。</p>
+            </div>
+            <div class="flex items-center bg-white/10 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 text-xs text-blue-100 w-full md:w-auto justify-between md:justify-start gap-3">
+                <div class="flex items-center space-x-2 truncate">
+                    <i class="fa-solid fa-user-shield text-blue-300"></i>
+                    <span class="font-mono text-xs opacity-90 truncate max-w-[180px]" id="user-id-display">認証中...</span>
+                </div>
+                <button onclick="copyUserId()" title="ユーザーIDをコピー" class="hover:bg-white/20 p-1.5 rounded-lg transition text-blue-200 hover:text-white">
+                    <i class="fa-regular fa-copy"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Metrics Grid -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">全タスク数</p>
+                    <p class="text-2xl font-bold text-slate-800" id="stat-total">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg font-bold">
+                    <i class="fa-solid fa-spinner"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">進行中</p>
+                    <p class="text-2xl font-bold text-amber-600" id="stat-in-progress">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">完了済み</p>
+                    <p class="text-2xl font-bold text-emerald-600" id="stat-completed">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg font-bold">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-medium text-slate-500">高優先度</p>
+                    <p class="text-2xl font-bold text-rose-600" id="stat-high-priority">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3 md:space-y-0 md:flex md:items-center md:justify-between md:gap-4">
+            <!-- Search Input -->
+            <div class="relative flex-grow">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="search-input" oninput="applyFilters()" placeholder="タスク名や説明を検索..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Status Filter -->
+                <select id="filter-status" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="all">すべてのステータス</option>
+                    <option value="todo">未着手 (ToDo)</option>
+                    <option value="in-progress">進行中</option>
+                    <option value="completed">完了</option>
+                </select>
+
+                <!-- Priority Filter -->
+                <select id="filter-priority" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="all">すべての優先度</option>
+                    <option value="high">高 (High)</option>
+                    <option value="medium">中 (Medium)</option>
+                    <option value="low">低 (Low)</option>
+                </select>
+
+                <!-- Category Filter -->
+                <select id="filter-category" onchange="applyFilters()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="all">全カテゴリ</option>
+                    <option value="work">仕事</option>
+                    <option value="personal">プライベート</option>
+                    <option value="shopping">買い物</option>
+                    <option value="other">その他</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Task List Container -->
+        <div id="tasks-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="col-span-full text-center py-16 text-slate-400 space-y-3">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-500"></i>
+                <p class="text-sm font-medium">Firestoreからデータを読み込んでいます...</p>
+            </div>
+        </div>
+
+        <!-- Empty State Component -->
+        <div id="empty-state" class="hidden col-span-full bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+            <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                <i class="fa-regular fa-clipboard"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">タスクが見つかりません</h3>
+            <p class="text-slate-500 text-sm mt-1 max-w-md mx-auto">新しいタスクを追加するか、フィルター・検索条件を変更してください。</p>
+            <button onclick="openTaskModal()" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-xl text-sm inline-flex items-center space-x-2 transition shadow-sm">
+                <i class="fa-solid fa-plus"></i>
+                <span>最初のタスクを作成する</span>
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Task Form Modal -->
+    <div id="task-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <h3 id="modal-title" class="text-lg font-bold text-slate-800">新規タスクの追加</h3>
+                <button onclick="closeTaskModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Task Form -->
+            <form id="task-form" onsubmit="handleFormSubmit(event)" class="p-6 space-y-4">
+                <input type="hidden" id="task-id">
+
+                <!-- Title Input -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">タイトル <span class="text-rose-500">*</span></label>
+                    <input type="text" id="task-title" required placeholder="例: 週次レポートの作成" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                </div>
+
+                <!-- Description Input -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">説明 (任意)</label>
+                    <textarea id="task-desc" rows="3" placeholder="詳細な内容や注意事項を記入..." class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">ステータス</label>
+                        <select id="task-status" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                            <option value="todo">未着手 (ToDo)</option>
+                            <option value="in-progress">進行中</option>
+                            <option value="completed">完了</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">優先度</label>
+                        <select id="task-priority" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                            <option value="low">低 (Low)</option>
+                            <option value="medium" selected>中 (Medium)</option>
+                            <option value="high">高 (High)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">カテゴリ</label>
+                        <select id="task-category" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                            <option value="work">仕事</option>
+                            <option value="personal">プライベート</option>
+                            <option value="shopping">買い物</option>
+                            <option value="other">その他</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">期限日</label>
+                        <input type="date" id="task-dueDate" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-medium transition">キャンセル</button>
+                    <button type="submit" id="btn-save-task" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition shadow-md shadow-blue-500/20 flex items-center space-x-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>保存する</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Custom Delete Confirmation Modal -->
+    <div id="delete-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-100">
+            <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">タスクを削除しますか？</h3>
+            <p class="text-sm text-slate-500">この操作は取り消せません。本当にデータベースから削除してよろしいですか？</p>
+            <div class="flex items-center justify-center space-x-3 pt-2">
+                <button onclick="closeDeleteModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-medium transition">キャンセル</button>
+                <button id="btn-confirm-delete" onclick="executeDeleteTask()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-medium transition shadow-md shadow-rose-500/20">削除する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- Embedded Firebase Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            addDoc, 
+            updateDoc, 
+            deleteDoc, 
+            onSnapshot,
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Application Identifier
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'task-manager-app';
+
+        // Your Provided Firebase Configuration
+        const userProvidedConfig = {
+            apiKey: "AIzaSyBTvLp3eeWHPnj9joopTvBAEDzAPHByxF0",
+            authDomain: "task-5b9c5.firebaseapp.com",
+            projectId: "task-5b9c5",
+            storageBucket: "task-5b9c5.firebasestorage.app",
+            messagingSenderId: "321495458048",
+            appId: "1:321495458048:web:cb69dee6f5d4e95d3993e5"
+        };
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : userProvidedConfig;
+
+        // Global State Variables
+        let app, auth, db;
+        let currentUser = null;
+        let activeMode = 'private'; // 'private' or 'public'
+        let unsubscribeListener = null;
+        let rawTasks = [];
+        let pendingDeleteTaskId = null;
+
+        async function initApp() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Check for custom token or fallback to anonymous auth
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                currentUser = auth.currentUser;
+                
+                if (currentUser) {
+                    document.getElementById('user-id-display').textContent = currentUser.uid;
+                    showToast('Firebase 認証に成功しました', 'success');
+                    subscribeToTasks();
+                }
+            } catch (error) {
+                console.error('Firebase Auth Error:', error);
+                showToast('認証エラー: ' + error.message, 'error');
+                document.getElementById('user-id-display').textContent = '未認証';
+            }
+        }
+
+        function subscribeToTasks() {
+            if (!currentUser) return;
+
+            if (unsubscribeListener) {
+                unsubscribeListener();
+            }
+
+            // Path Rules adherence
+            const collectionPath = activeMode === 'private'
+                ? collection(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks')
+                : collection(db, 'artifacts', appId, 'public', 'data', 'tasks');
+
+            unsubscribeListener = onSnapshot(
+                collectionPath,
+                (snapshot) => {
+                    rawTasks = [];
+                    snapshot.forEach((docSnapshot) => {
+                        rawTasks.push({
+                            id: docSnapshot.id,
+                            ...docSnapshot.data()
+                        });
+                    });
+                    applyFilters();
+                },
+                (error) => {
+                    console.error('Firestore Realtime Error:', error);
+                    showToast('同期エラー: ' + error.message, 'error');
+                }
+            );
+        }
+
+        window.handleFormSubmit = async function(event) {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast('操作権限がありません', 'error');
+                return;
+            }
+
+            const taskId = document.getElementById('task-id').value;
+            const title = document.getElementById('task-title').value.trim();
+            const description = document.getElementById('task-desc').value.trim();
+            const status = document.getElementById('task-status').value;
+            const priority = document.getElementById('task-priority').value;
+            const category = document.getElementById('task-category').value;
+            const dueDate = document.getElementById('task-dueDate').value;
+
+            if (!title) return;
+
+            const btnSave = document.getElementById('btn-save-task');
+            btnSave.disabled = true;
+            btnSave.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>保存中...</span>`;
+
+            try {
+                const taskData = {
+                    title,
+                    description,
+                    status,
+                    priority,
+                    category,
+                    dueDate: dueDate || null,
+                    updatedAt: serverTimestamp(),
+                    createdBy: currentUser.uid
+                };
+
+                const targetCollection = activeMode === 'private'
+                    ? collection(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks')
+                    : collection(db, 'artifacts', appId, 'public', 'data', 'tasks');
+
+                if (taskId) {
+                    const docRef = doc(targetCollection, taskId);
+                    await updateDoc(docRef, taskData);
+                    showToast('タスクを更新しました', 'success');
+                } else {
+                    taskData.createdAt = serverTimestamp();
+                    await addDoc(targetCollection, taskData);
+                    showToast('新規タスクを追加しました', 'success');
+                }
+
+                closeTaskModal();
+            } catch (error) {
+                console.error('Save Task Error:', error);
+                showToast('保存失敗: ' + error.message, 'error');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerHTML = `<i class="fa-solid fa-floppy-disk"></i><span>保存する</span>`;
+            }
+        };
+
+        window.toggleTaskStatus = async function(taskId, currentStatus) {
+            if (!currentUser) return;
+            const newStatus = currentStatus === 'completed' ? 'todo' : 'completed';
+
+            try {
+                const targetDoc = activeMode === 'private'
+                    ? doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', taskId)
+                    : doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId);
+
+                await updateDoc(targetDoc, {
+                    status: newStatus,
+                    updatedAt: serverTimestamp()
+                });
+                showToast(newStatus === 'completed' ? 'タスクを完了にしました' : 'タスクを未完了に戻しました', 'info');
+            } catch (error) {
+                console.error('Toggle Error:', error);
+                showToast('ステータス変更エラー: ' + error.message, 'error');
+            }
+        };
+
+        window.executeDeleteTask = async function() {
+            if (!pendingDeleteTaskId || !currentUser) return;
+            
+            const btnDelete = document.getElementById('btn-confirm-delete');
+            btnDelete.disabled = true;
+
+            try {
+                const targetDoc = activeMode === 'private'
+                    ? doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', pendingDeleteTaskId)
+                    : doc(db, 'artifacts', appId, 'public', 'data', 'tasks', pendingDeleteTaskId);
+
+                await deleteDoc(targetDoc);
+                showToast('タスクを削除しました', 'success');
+                closeDeleteModal();
+            } catch (error) {
+                console.error('Delete Error:', error);
+                showToast('削除失敗: ' + error.message, 'error');
+            } finally {
+                btnDelete.disabled = false;
+            }
+        };
+
+        window.applyFilters = function() {
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            const filterStatus = document.getElementById('filter-status').value;
+            const filterPriority = document.getElementById('filter-priority').value;
+            const filterCategory = document.getElementById('filter-category').value;
+
+            let filtered = rawTasks.filter(task => {
+                const matchesSearch = (task.title || '').toLowerCase().includes(searchQuery) || 
+                                      (task.description || '').toLowerCase().includes(searchQuery);
+                const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+                const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
+                const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
+
+                return matchesSearch && matchesStatus && matchesPriority && matchesCategory;
+            });
+
+            filtered.sort((a, b) => {
+                const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                return timeB - timeA;
+            });
+
+            renderTaskGrid(filtered);
+            updateDashboardStats(rawTasks);
+        };
+
+        function renderTaskGrid(tasks) {
+            const container = document.getElementById('tasks-container');
+            const emptyState = document.getElementById('empty-state');
+
+            if (tasks.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            container.innerHTML = tasks.map(task => {
+                const priorityBadges = {
+                    high: '<span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">高</span>',
+                    medium: '<span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">中</span>',
+                    low: '<span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">低</span>'
+                };
+
+                const isCompleted = task.status === 'completed';
+                const statusBadges = {
+                    'todo': '<span class="text-xs text-slate-500 font-medium">未着手</span>',
+                    'in-progress': '<span class="text-xs text-amber-600 font-medium">進行中</span>',
+                    'completed': '<span class="text-xs text-emerald-600 font-medium">完了</span>'
+                };
+
+                const categoryLabels = {
+                    work: '<i class="fa-solid fa-briefcase text-slate-400"></i> 仕事',
+                    personal: '<i class="fa-solid fa-user text-slate-400"></i> プライベート',
+                    shopping: '<i class="fa-solid fa-cart-shopping text-slate-400"></i> 買い物',
+                    other: '<i class="fa-solid fa-folder text-slate-400"></i> その他'
+                };
+
+                return `
+                    <div class="task-card-enter bg-white rounded-2xl p-5 border ${isCompleted ? 'border-slate-200 bg-slate-50/60 opacity-80' : 'border-slate-200/90'} shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    ${priorityBadges[task.priority] || priorityBadges.medium}
+                                    <span class="text-xs text-slate-500 font-medium">${categoryLabels[task.category] || categoryLabels.other}</span>
+                                </div>
+                                <div class="flex items-center space-x-1">
+                                    ${statusBadges[task.status] || statusBadges.todo}
+                                </div>
+                            </div>
+
+                            <div class="pt-1">
+                                <h4 class="text-base font-bold ${isCompleted ? 'line-through text-slate-400' : 'text-slate-800'} leading-snug">
+                                    ${escapeHtml(task.title)}
+                                </h4>
+                                ${task.description ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(task.description)}</p>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <div class="text-slate-400 flex items-center space-x-1.5">
+                                <i class="fa-regular fa-calendar text-slate-400"></i>
+                                <span>${task.dueDate ? task.dueDate : '期限なし'}</span>
+                            </div>
+
+                            <div class="flex items-center space-x-1">
+                                <button onclick="toggleTaskStatus('${task.id}', '${task.status}')" title="${isCompleted ? '未完了に戻す' : '完了にする'}" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-emerald-600 transition">
+                                    <i class="fa-${isCompleted ? 'solid fa-arrow-rotate-left' : 'regular fa-circle-check'} text-base"></i>
+                                </button>
+                                <button onclick="openTaskModal('${task.id}')" title="編集" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition">
+                                    <i class="fa-regular fa-pen-to-square text-base"></i>
+                                </button>
+                                <button onclick="openDeleteModal('${task.id}')" title="削除" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-rose-600 transition">
+                                    <i class="fa-regular fa-trash-can text-base"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateDashboardStats(tasks) {
+            document.getElementById('stat-total').textContent = tasks.length;
+            document.getElementById('stat-in-progress').textContent = tasks.filter(t => t.status === 'in-progress').length;
+            document.getElementById('stat-completed').textContent = tasks.filter(t => t.status === 'completed').length;
+            document.getElementById('stat-high-priority').textContent = tasks.filter(t => t.priority === 'high' && t.status !== 'completed').length;
+        }
+
+        window.switchDataMode = function(mode) {
+            if (activeMode === mode) return;
+            activeMode = mode;
+
+            const btnPrivate = document.getElementById('btn-mode-private');
+            const btnPublic = document.getElementById('btn-mode-public');
+            const modeBadge = document.getElementById('mode-badge-label');
+
+            if (mode === 'private') {
+                btnPrivate.className = 'px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 bg-white text-blue-600 shadow-sm';
+                btnPublic.className = 'px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 hover:text-slate-900';
+                modeBadge.textContent = 'プライベートデータベースモード';
+            } else {
+                btnPublic.className = 'px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 bg-white text-blue-600 shadow-sm';
+                btnPrivate.className = 'px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1 hover:text-slate-900';
+                modeBadge.textContent = 'パブリック共有データベースモード';
+            }
+
+            showToast(`モードを「${mode === 'private' ? 'マイタスク' : 'パブリック共有'}」に変更しました`, 'info');
+            subscribeToTasks();
+        };
+
+        window.openTaskModal = function(taskId = null) {
+            const modal = document.getElementById('task-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const form = document.getElementById('task-form');
+
+            form.reset();
+            document.getElementById('task-id').value = '';
+
+            if (taskId) {
+                const task = rawTasks.find(t => t.id === taskId);
+                if (task) {
+                    modalTitle.textContent = 'タスクの編集';
+                    document.getElementById('task-id').value = task.id;
+                    document.getElementById('task-title').value = task.title || '';
+                    document.getElementById('task-desc').value = task.description || '';
+                    document.getElementById('task-status').value = task.status || 'todo';
+                    document.getElementById('task-priority').value = task.priority || 'medium';
+                    document.getElementById('task-category').value = task.category || 'work';
+                    document.getElementById('task-dueDate').value = task.dueDate || '';
+                }
+            } else {
+                modalTitle.textContent = '新規タスクの追加';
+            }
+
+            modal.classList.remove('hidden');
+        };
+
+        window.closeTaskModal = function() {
+            document.getElementById('task-modal').classList.add('hidden');
+        };
+
+        window.openDeleteModal = function(taskId) {
+            pendingDeleteTaskId = taskId;
+            document.getElementById('delete-modal').classList.remove('hidden');
+        };
+
+        window.closeDeleteModal = function() {
+            pendingDeleteTaskId = null;
+            document.getElementById('delete-modal').classList.add('hidden');
+        };
+
+        window.copyUserId = function() {
+            if (!currentUser) return;
+            const textToCopy = currentUser.uid;
+            
+            const tempInput = document.createElement('input');
+            tempInput.value = textToCopy;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            showToast('ユーザーIDをクリップボードにコピーしました', 'success');
+        };
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColors = {
+                success: 'bg-emerald-800 text-white',
+                error: 'bg-rose-800 text-white',
+                info: 'bg-slate-800 text-white'
+            };
+
+            const icons = {
+                success: '<i class="fa-solid fa-circle-check text-emerald-400"></i>',
+                error: '<i class="fa-solid fa-circle-xmark text-rose-400"></i>',
+                info: '<i class="fa-solid fa-circle-info text-blue-400"></i>'
+            };
+
+            toast.className = `pointer-events-auto flex items-center space-x-2 px-4 py-3 rounded-xl shadow-lg text-xs font-medium ${bgColors[type]} transition-all transform duration-300 translate-y-2 opacity-0`;
+            toast.innerHTML = `${icons[type]}<span>${escapeHtml(message)}</span>`;
+
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
